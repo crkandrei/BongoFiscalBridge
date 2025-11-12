@@ -1,4 +1,5 @@
 import express, { Request, Response, NextFunction } from 'express';
+import cors from 'cors';
 import { config } from './config/config';
 import logger from './utils/logger';
 import { ensureDirectoryExists } from './utils/fileUtils';
@@ -6,6 +7,16 @@ import printRoutes from './routes/print.routes';
 
 // Create Express app
 const app = express();
+
+// CORS middleware - allow requests from any origin (since bridge runs locally)
+app.use(
+  cors({
+    origin: '*', // Allow all origins for local bridge
+    methods: ['GET', 'POST', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+    credentials: false,
+  })
+);
 
 // Middleware for JSON parsing
 app.use(express.json());
