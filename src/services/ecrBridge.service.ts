@@ -58,13 +58,30 @@ class ECRBridgeService {
   }
 
   /**
-   * Generates the ECR Bridge file content
-   * Format: I;{productName} ({duration});1;{price};19; P;
+   * Generates the ECR Bridge file content according to official Datecs format
+   * Format:
+   * FISCAL (or FISCAL;fiscalCode if fiscalCode is set)
+   * I;name;qty;price;vat
+   * P;pay_code;value
    */
   private generateFileContent(data: PrintRequest): string {
     const { productName, duration, price } = data;
-    // Format: I;{productName} ({duration});1;{price};19; P;
-    return `I;${productName} (${duration});1;${price};19; P;`;
+    
+    // Format price with dot as decimal separator
+    const formattedPrice = price.toString().replace(',', '.');
+    
+    // Build header line: FISCAL or FISCAL;fiscalCode
+    const fiscalCode = config.ecrBridge.fiscalCode;
+    const headerLine = fiscalCode ? `FISCAL;${fiscalCode}` : 'FISCAL';
+    
+    // Item line: I;name;qty;price;vat
+    const itemLine = `I;${productName} (${duration});1;${formattedPrice};1`;
+    
+    // Payment line: P;1;0 (single payment method, value 0 = pay total amount)
+    const paymentLine = 'P;1;0';
+    
+    // Combine all lines
+    return `${headerLine}\n${itemLine}\n${paymentLine}`;
   }
 
   /**

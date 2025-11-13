@@ -36,9 +36,12 @@ PORT=9000
 ECR_BRIDGE_BON_PATH=C:/ECRBridge/Bon/
 ECR_BRIDGE_BON_OK_PATH=C:/ECRBridge/BonOK/
 ECR_BRIDGE_BON_ERR_PATH=C:/ECRBridge/BonErr/
+ECR_BRIDGE_FISCAL_CODE=
 RESPONSE_TIMEOUT=10000
 LOG_LEVEL=info
 ```
+
+**Notă:** `ECR_BRIDGE_FISCAL_CODE` este opțional. Dacă este setat, va fi inclus în header-ul bonului fiscal (`FISCAL;{fiscalCode}`). Dacă nu este setat, se folosește doar `FISCAL`.
 
 **Notă:** Pentru testare pe Mac/Linux, poți folosi căi relative:
 ```env
@@ -193,25 +196,40 @@ Aplicația generează fișiere în formatul specificat de ECR Bridge:
 
 ### Format Fișier Bon
 
-Fișierul generat are următorul format:
+Fișierul generat respectă formatul oficial Datecs și are următoarea structură:
 
 ```
-I;{productName} ({duration});1;{price};19; P;
+FISCAL
+I;{productName} ({duration});1;{price};1
+P;1;0
+```
+
+Sau, dacă `ECR_BRIDGE_FISCAL_CODE` este setat:
+
+```
+FISCAL;{fiscalCode}
+I;{productName} ({duration});1;{price};1
+P;1;0
 ```
 
 **Exemplu:**
 
 ```
-I;Ora de joacă (1h 15m);1;22.50;19; P;
+FISCAL
+I;Ora de joacă (1h 15m);1;22.50;1
+P;1;0
 ```
 
 **Structura:**
-- `I;` - Comandă de imprimare
-- `{productName} ({duration})` - Nume produs și durată
-- `1` - Cantitate
-- `{price}` - Preț
-- `19` - TVA (19%)
-- ` P;` - Finalizare comandă
+- **Linia 1:** `FISCAL` sau `FISCAL;{fiscalCode}` - Header obligatoriu pentru bon fiscal
+- **Linia 2:** `I;name;qty;price;vat` - Linie de articol
+  - `I;` - Comandă de imprimare articol
+  - `{productName} ({duration})` - Nume produs și durată
+  - `1` - Cantitate
+  - `{price}` - Preț unitar (cu punct ca separator zecimal)
+  - `1` - Cod cota TVA
+- **Linia 3:** `P;pay_code;value` - Linie de plată obligatorie
+  - `P;1;0` - Modalitate de plată unică, valoare 0 = achită suma totală
 
 ### Nume Fișiere
 
@@ -242,6 +260,7 @@ Toate configurațiile se fac prin fișierul `.env`:
 | `ECR_BRIDGE_BON_PATH` | Calea către folderul Bon | `C:/ECRBridge/Bon/` |
 | `ECR_BRIDGE_BON_OK_PATH` | Calea către folderul BonOK | `C:/ECRBridge/BonOK/` |
 | `ECR_BRIDGE_BON_ERR_PATH` | Calea către folderul BonErr | `C:/ECRBridge/BonErr/` |
+| `ECR_BRIDGE_FISCAL_CODE` | Cod fiscal (opțional) - dacă este setat, va fi inclus în header | - |
 | `RESPONSE_TIMEOUT` | Timeout pentru așteptare răspuns (ms) | `10000` |
 | `LOG_LEVEL` | Nivelul de logare (info, warn, error) | `info` |
 

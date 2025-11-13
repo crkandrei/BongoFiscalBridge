@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import logger from '../utils/logger';
 import { validatePrintRequest } from '../utils/validator';
 import ecrBridgeService from '../services/ecrBridge.service';
+import { config } from '../config/config';
 
 /**
  * Handles POST /print request
@@ -53,7 +54,13 @@ export async function handlePrintRequest(
     }
 
     // Generate the command that was sent (for validation)
-    const sentCommand = `I;${printData.productName} (${printData.duration});1;${printData.price};19; P;`;
+    // Format matches the official Datecs format
+    const fiscalCode = config.ecrBridge.fiscalCode;
+    const headerLine = fiscalCode ? `FISCAL;${fiscalCode}` : 'FISCAL';
+    const formattedPrice = printData.price.toString().replace(',', '.');
+    const itemLine = `I;${printData.productName} (${printData.duration});1;${formattedPrice};1`;
+    const paymentLine = 'P;1;0';
+    const sentCommand = `${headerLine}\n${itemLine}\n${paymentLine}`;
 
     logger.info('Receipt file generated, waiting for response', {
       requestId,

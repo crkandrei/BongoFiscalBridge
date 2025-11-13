@@ -16,6 +16,7 @@ export const config = {
     bonPath: process.env.ECR_BRIDGE_BON_PATH || 'C:/ECRBridge/Bon/',
     bonOkPath: process.env.ECR_BRIDGE_BON_OK_PATH || 'C:/ECRBridge/BonOK/',
     bonErrPath: process.env.ECR_BRIDGE_BON_ERR_PATH || 'C:/ECRBridge/BonErr/',
+    fiscalCode: process.env.ECR_BRIDGE_FISCAL_CODE || undefined,
   },
 
   // Response timeout in milliseconds
