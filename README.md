@@ -201,7 +201,7 @@ Fișierul generat respectă formatul oficial Datecs și are următoarea structur
 ```
 FISCAL
 I;{productName} ({duration});1;{price};1
-P;1;0
+P;{pay_code};0
 ```
 
 Sau, dacă `ECR_BRIDGE_FISCAL_CODE` este setat:
@@ -209,11 +209,19 @@ Sau, dacă `ECR_BRIDGE_FISCAL_CODE` este setat:
 ```
 FISCAL;{fiscalCode}
 I;{productName} ({duration});1;{price};1
-P;1;0
+P;{pay_code};0
 ```
 
-**Exemplu:**
+**Exemple:**
 
+Pentru plată cash (numerar):
+```
+FISCAL
+I;Ora de joacă (1h 15m);1;22.50;1
+P;0;0
+```
+
+Pentru plată card:
 ```
 FISCAL
 I;Ora de joacă (1h 15m);1;22.50;1
@@ -229,7 +237,8 @@ P;1;0
   - `{price}` - Preț unitar (cu punct ca separator zecimal)
   - `1` - Cod cota TVA
 - **Linia 3:** `P;pay_code;value` - Linie de plată obligatorie
-  - `P;1;0` - Modalitate de plată unică, valoare 0 = achită suma totală
+  - `pay_code`: `0` = CASH (Numerar), `1` = CARD (Card) - conform documentației Datecs
+  - `value`: `0` = achită suma totală
 
 ### Nume Fișiere
 

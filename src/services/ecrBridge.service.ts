@@ -65,7 +65,7 @@ class ECRBridgeService {
    * P;pay_code;value
    */
   private generateFileContent(data: PrintRequest): string {
-    const { productName, duration, price } = data;
+    const { productName, duration, price, paymentType } = data;
     
     // Format price with dot as decimal separator
     const formattedPrice = price.toString().replace(',', '.');
@@ -77,8 +77,11 @@ class ECRBridgeService {
     // Item line: I;name;qty;price;vat
     const itemLine = `I;${productName} (${duration});1;${formattedPrice};1`;
     
-    // Payment line: P;1;0 (single payment method, value 0 = pay total amount)
-    const paymentLine = 'P;1;0';
+    // Payment line: P;pay_code;value
+    // pay_code: 0 = CASH (Numerar), 1 = CARD (Card) - conform documentației Datecs
+    // value: 0 = pay total amount
+    const paymentCode = paymentType === 'CASH' ? '0' : '1';
+    const paymentLine = `P;${paymentCode};0`;
     
     // Combine all lines
     return `${headerLine}\n${itemLine}\n${paymentLine}`;

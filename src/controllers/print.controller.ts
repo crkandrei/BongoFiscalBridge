@@ -59,7 +59,9 @@ export async function handlePrintRequest(
     const headerLine = fiscalCode ? `FISCAL;${fiscalCode}` : 'FISCAL';
     const formattedPrice = printData.price.toString().replace(',', '.');
     const itemLine = `I;${printData.productName} (${printData.duration});1;${formattedPrice};1`;
-    const paymentLine = 'P;1;0';
+    // Payment code: 0 = CASH (Numerar), 1 = CARD (Card) - conform documentației Datecs
+    const paymentCode = printData.paymentType === 'CASH' ? '0' : '1';
+    const paymentLine = `P;${paymentCode};0`;
     const sentCommand = `${headerLine}\n${itemLine}\n${paymentLine}`;
 
     logger.info('Receipt file generated, waiting for response', {
