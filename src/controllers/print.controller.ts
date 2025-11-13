@@ -52,14 +52,19 @@ export async function handlePrintRequest(
       return;
     }
 
+    // Generate the command that was sent (for validation)
+    const sentCommand = `I;${printData.productName} (${printData.duration});1;${printData.price};19; P;`;
+
     logger.info('Receipt file generated, waiting for response', {
       requestId,
       filename,
+      sentCommand,
     });
 
     // Wait for ECR Bridge response
+    // Pass the sent command to verify the error file corresponds to this receipt
     try {
-      const response = await ecrBridgeService.waitForResponse(filename);
+      const response = await ecrBridgeService.waitForResponse(filename, sentCommand);
 
       if (response.success) {
         logger.info('Print request completed successfully', {

@@ -1,4 +1,5 @@
 import path from 'path';
+import fs from 'fs';
 import { config } from '../config/config';
 import logger from '../utils/logger';
 import {
@@ -8,6 +9,7 @@ import {
   ensureDirectoryExists,
 } from '../utils/fileUtils';
 import { PrintRequest } from '../utils/validator';
+import { parseErrorFile } from '../utils/errorParser';
 
 /**
  * Response from waiting for ECR Bridge response
@@ -23,6 +25,23 @@ export interface ECRResponse {
  * Handles file generation and response monitoring
  */
 class ECRBridgeService {
+  /**
+   * Lists directory contents for debugging
+   * @param dirPath - Directory path to list
+   * @returns Array of filenames or empty array on error
+   */
+  private listDirectoryContents(dirPath: string): string[] {
+    try {
+      if (!fs.existsSync(dirPath)) {
+        return [];
+      }
+      return fs.readdirSync(dirPath);
+    } catch (error) {
+      logger.error(`Failed to list directory contents: ${dirPath}`, { error });
+      return [];
+    }
+  }
+
   /**
    * Generates a unique timestamp for filename
    * Format: YYYYMMDDHHmmss
@@ -89,53 +108,136 @@ class ECRBridgeService {
   }
 
   /**
-   * Waits for ECR Bridge response files (.OK or .ERR)
-   * Uses polling mechanism for cross-platform compatibility
-   * @param filename - The base filename (e.g., "bon_123456.txt")
+   * Checks if a response file exists in a directory by listing directory contents
+   * The file keeps the .txt extension and is moved to BonErr or BonOK
+   * @param dirPath - Directory to check (BonErr or BonOK)
+   * @param filename - The full filename with .txt extension (e.g., "bon_20251113020617.txt")
+   * @returns Full path to file if found, null otherwise
+   */
+  private findResponseFile(
+    dirPath: string,
+    filename: string
+  ): string | null {
+    try {
+      // File keeps .txt extension, just moved to different directory
+      const directPath = path.join(dirPath, filename);
+      if (fileExists(directPath)) {
+        return directPath;
+      }
+
+      // If not found, list directory and search case-insensitively
+      const dirContents = this.listDirectoryContents(dirPath);
+      const filenameLower = filename.toLowerCase();
+      const matchingFile = dirContents.find(f => {
+        const fileLower = f.toLowerCase();
+        return fileLower === filenameLower;
+      });
+
+      if (matchingFile) {
+        return path.join(dirPath, matchingFile);
+      }
+
+      return null;
+    } catch (error) {
+      logger.error(`Error finding response file in ${dirPath}`, { error, filename });
+      return null;
+    }
+  }
+
+  /**
+   * Waits for ECR Bridge response files
+   * The file keeps .txt extension and is moved to BonOK (success) or BonErr (error)
+   * @param filename - The receipt filename (e.g., "bon_123456.txt")
+   * @param expectedCommand - The original command that was sent (for validation)
    * @param timeout - Maximum wait time in milliseconds
    * @returns Promise that resolves with response status
    */
   public async waitForResponse(
     filename: string,
+    expectedCommand?: string,
     timeout: number = config.responseTimeout
   ): Promise<ECRResponse> {
     return new Promise((resolve, reject) => {
-      // Extract base name without extension
-      const baseName = filename.replace(/\.txt$/, '');
-      const okFilePath = path.join(
-        config.ecrBridge.bonOkPath,
-        `${baseName}.OK`
-      );
-      const errFilePath = path.join(
-        config.ecrBridge.bonErrPath,
-        `${baseName}.ERR`
-      );
+      // Normalize paths to handle Windows/Unix differences
+      const bonOkPath = path.normalize(config.ecrBridge.bonOkPath);
+      const bonErrPath = path.normalize(config.ecrBridge.bonErrPath);
 
       // Ensure response directories exist
-      ensureDirectoryExists(config.ecrBridge.bonOkPath);
-      ensureDirectoryExists(config.ecrBridge.bonErrPath);
+      ensureDirectoryExists(bonOkPath);
+      ensureDirectoryExists(bonErrPath);
 
       const startTime = Date.now();
       const pollInterval = 200; // Check every 200ms
 
       logger.info('Waiting for ECR Bridge response', {
         filename,
-        okFilePath,
-        errFilePath,
+        bonOkPath,
+        bonErrPath,
         timeout,
+        note: 'File keeps .txt extension and is moved to BonOK or BonErr',
       });
 
       const checkInterval = setInterval(() => {
         const elapsed = Date.now() - startTime;
 
-        // Check for timeout
+        // Check for timeout first
         if (elapsed >= timeout) {
           clearInterval(checkInterval);
+          
+          // Final check before timeout - maybe files appeared just now
+          const errFile = this.findResponseFile(bonErrPath, filename);
+          const okFile = this.findResponseFile(bonOkPath, filename);
+          
+          if (errFile) {
+            // Found error file at timeout - process it
+            logger.warn('Found error file at timeout', {
+              filename,
+              errFile,
+              elapsed,
+            });
+            const errorContent = readFileSafe(errFile);
+            const parsedError = errorContent ? parseErrorFile(errorContent) : null;
+            const errorMessage = parsedError?.errorMessage || errorContent || 'Unknown error from ECR Bridge';
+            
+            logger.error('ECR Bridge returned error (found at timeout)', {
+              filename,
+              errFile,
+              errorMessage,
+            });
+            
+            resolve({
+              success: false,
+              details: errorMessage,
+              filename,
+            });
+            return;
+          }
+          
+          if (okFile) {
+            // Found OK file at timeout - process it
+            logger.info('ECR Bridge returned success (found at timeout)', {
+              filename,
+              okFile,
+              elapsed,
+            });
+            resolve({
+              success: true,
+              filename,
+            });
+            return;
+          }
+          
+          // No files found - timeout
           logger.warn('Timeout waiting for ECR Bridge response', {
             filename,
             elapsed,
             timeout,
+            bonOkPath,
+            bonErrPath,
+            okDirContents: this.listDirectoryContents(bonOkPath),
+            errDirContents: this.listDirectoryContents(bonErrPath),
           });
+          
           reject(
             new Error(
               `Timeout waiting for response after ${timeout}ms. File: ${filename}`
@@ -144,37 +246,80 @@ class ECRBridgeService {
           return;
         }
 
-        // Check for error file first (higher priority)
-        if (fileExists(errFilePath)) {
+        // Check BonErr first (errors have priority)
+        // File keeps .txt extension, just moved to BonErr directory
+        const errFile = this.findResponseFile(bonErrPath, filename);
+        if (errFile) {
           clearInterval(checkInterval);
-          const errorContent = readFileSafe(errFilePath);
+          
+          // Read and parse error file
+          const errorContent = readFileSafe(errFile);
+          const parsedError = errorContent ? parseErrorFile(errorContent) : null;
+          
+          // Verify that the error file corresponds to the correct receipt
+          if (expectedCommand && parsedError?.originalCommand) {
+            const commandsMatch = parsedError.originalCommand.trim() === expectedCommand.trim();
+            if (!commandsMatch) {
+              logger.warn('Error file command mismatch - possible wrong error file', {
+                filename,
+                errFile,
+                expectedCommand,
+                errorFileCommand: parsedError.originalCommand,
+              });
+            } else {
+              logger.debug('Error file command verified - matches expected command', {
+                filename,
+                expectedCommand,
+              });
+            }
+          }
+          
+          const errorMessage = parsedError?.errorMessage || errorContent || 'Unknown error from ECR Bridge';
+          
+          // Log error details
           logger.error('ECR Bridge returned error', {
             filename,
-            errFilePath,
+            errFile,
+            elapsed,
             errorContent,
+            parsedError: parsedError ? {
+              originalCommand: parsedError.originalCommand,
+              timestamp: parsedError.timestamp,
+              errorMessage: parsedError.errorMessage,
+            } : null,
           });
+          
+          // Return error response
           resolve({
             success: false,
-            details: errorContent || 'Unknown error from ECR Bridge',
+            details: errorMessage,
             filename,
           });
           return;
         }
 
-        // Check for success file
-        if (fileExists(okFilePath)) {
+        // Check BonOK for success file
+        // File keeps .txt extension, just moved to BonOK directory
+        const okFile = this.findResponseFile(bonOkPath, filename);
+        if (okFile) {
           clearInterval(checkInterval);
+          
+          // Log success
           logger.info('ECR Bridge returned success', {
             filename,
-            okFilePath,
+            okFile,
             elapsed,
           });
+          
+          // Return success response
           resolve({
             success: true,
             filename,
           });
           return;
         }
+
+        // No files found yet, continue polling
       }, pollInterval);
     });
   }
