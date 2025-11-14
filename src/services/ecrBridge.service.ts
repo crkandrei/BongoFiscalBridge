@@ -58,41 +58,68 @@ class ECRBridgeService {
   }
 
   /**
-   * Generates the ECR Bridge file content according to official Datecs format
-   * Format:
-   * FISCAL (or FISCAL;fiscalCode if fiscalCode is set)
-   * I;name;qty;price;vat
-   * P;pay_code;value
+   * Generates the ECR Bridge file content according to mode
+   * LIVE mode: Official Datecs fiscal format (FISCAL, I;, P;)
+   * TEST mode: Non-fiscal test format (TEXT, T;)
    */
-  private generateFileContent(data: PrintRequest): string {
+  private generateFileContent(data: PrintRequest, mode: 'live' | 'test'): string {
     const { productName, duration, price, paymentType } = data;
     
-    // Format price with dot as decimal separator
-    const formattedPrice = price.toString().replace(',', '.');
-    
-    // Build header line: FISCAL or FISCAL;fiscalCode
-    const fiscalCode = config.ecrBridge.fiscalCode;
-    const headerLine = fiscalCode ? `FISCAL;${fiscalCode}` : 'FISCAL';
-    
-    // Item line: I;name;qty;price;vat
-    const itemLine = `I;${productName} (${duration});1;${formattedPrice};1`;
-    
-    // Payment line: P;pay_code;value
-    // pay_code: 0 = CASH (Numerar), 1 = CARD (Card) - conform documentației Datecs
-    // value: 0 = pay total amount
-    const paymentCode = paymentType === 'CASH' ? '0' : '1';
-    const paymentLine = `P;${paymentCode};0`;
-    
-    // Combine all lines
-    return `${headerLine}\n${itemLine}\n${paymentLine}`;
+    if (mode === 'live') {
+      // Format price with dot as decimal separator
+      const formattedPrice = price.toString().replace(',', '.');
+      
+      // Build header line: FISCAL or FISCAL;fiscalCode
+      const fiscalCode = config.ecrBridge.fiscalCode;
+      const headerLine = fiscalCode ? `FISCAL;${fiscalCode}` : 'FISCAL';
+      
+      // Item line: I;name;qty;price;vat
+      const itemLine = `I;${productName} (${duration});1;${formattedPrice};1`;
+      
+      // Payment line: P;pay_code;value
+      // pay_code: 0 = CASH (Numerar), 1 = CARD (Card) - conform documentației Datecs
+      // value: 0 = pay total amount
+      const paymentCode = paymentType === 'CASH' ? '0' : '1';
+      const paymentLine = `P;${paymentCode};0`;
+      
+      // Combine all lines
+      return `${headerLine}\n${itemLine}\n${paymentLine}`;
+    } else {
+      // TEST mode: Non-fiscal format
+      // Format price with dot as decimal separator
+      const formattedPrice = price.toString().replace(',', '.');
+      
+      // First line: TEXT
+      const lines: string[] = ['TEXT'];
+      
+      // Product line: T;<productName (duration)>     <price>
+      const productLine = `T;${productName} (${duration})     ${formattedPrice}`;
+      lines.push(productLine);
+      
+      // Separator
+      lines.push('T;--------------------');
+      
+      // Total line: T;TOTAL: <total>
+      lines.push(`T;TOTAL: ${formattedPrice}`);
+      
+      // Payment line: T;Plata: CASH or T;Plata: CARD
+      const paymentText = paymentType === 'CASH' ? 'CASH' : 'CARD';
+      lines.push(`T;Plata: ${paymentText}`);
+      
+      // Footer
+      lines.push('T;Bon NON-FISCAL - TEST');
+      
+      return lines.join('\n');
+    }
   }
 
   /**
    * Generates a receipt file for ECR Bridge
    * @param data - The print request data
+   * @param mode - Bridge mode: 'live' for fiscal, 'test' for non-fiscal
    * @returns The generated filename (without path) or null on error
    */
-  public generateReceiptFile(data: PrintRequest): string | null {
+  public generateReceiptFile(data: PrintRequest, mode: 'live' | 'test'): string | null {
     try {
       // Ensure the Bon directory exists
       if (!ensureDirectoryExists(config.ecrBridge.bonPath)) {
@@ -105,8 +132,8 @@ class ECRBridgeService {
       const filename = `bon_${timestamp}.txt`;
       const filePath = path.join(config.ecrBridge.bonPath, filename);
 
-      // Generate file content
-      const content = this.generateFileContent(data);
+      // Generate file content based on mode
+      const content = this.generateFileContent(data, mode);
 
       // Write file
       if (!writeFileSafe(filePath, content)) {
@@ -114,15 +141,17 @@ class ECRBridgeService {
         return null;
       }
 
-      logger.info('Receipt file generated successfully', {
+      const modeLabel = mode === 'live' ? 'Fiscal receipt' : 'Non-fiscal test receipt';
+      logger.info(`Mode ${mode.toUpperCase()}: ${modeLabel}`, {
         filename,
         filePath,
         content,
+        mode,
       });
 
       return filename;
     } catch (error) {
-      logger.error('Error generating receipt file', { error, data });
+      logger.error('Error generating receipt file', { error, data, mode });
       return null;
     }
   }

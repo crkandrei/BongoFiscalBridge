@@ -94,6 +94,11 @@ function initializeApp(): void {
     process.exit(1);
   }
 
+  // Log bridge mode
+  const modeLabel = config.bridgeMode === 'live' ? 'LIVE' : 'TEST';
+  const modeDescription = config.bridgeMode === 'live' ? 'Fiscal receipts' : 'Non-fiscal test receipts';
+  logger.info(`Bridge mode: ${modeLabel} - ${modeDescription}`);
+
   logger.info('Application initialized successfully');
 }
 
@@ -109,6 +114,7 @@ function startServer(): void {
     logger.info(`Server started on port ${config.port}`, {
       port: config.port,
       env: process.env.NODE_ENV || 'development',
+      bridgeMode: config.bridgeMode.toUpperCase(),
     });
   });
 

@@ -38,36 +38,66 @@ export async function handlePrintRequest(
 
     const printData = validation.data;
 
+    // Get bridge mode from config
+    const bridgeMode = config.bridgeMode as 'live' | 'test';
+
     // Generate receipt file
-    const filename = ecrBridgeService.generateReceiptFile(printData);
+    const filename = ecrBridgeService.generateReceiptFile(printData, bridgeMode);
     if (!filename) {
       logger.error('Failed to generate receipt file', {
         requestId,
         printData,
+        bridgeMode,
       });
-      res.status(500).json({
-        status: 'error',
-        message: 'Eroare la generarea fișierului bon',
-        details: 'Nu s-a putut crea fișierul pentru ECR Bridge',
-      });
+      
+      // Return appropriate error response based on mode
+      if (bridgeMode === 'test') {
+        res.status(500).json({
+          status: 'error',
+          mode: 'test',
+          reason: 'bridge_failed',
+        });
+      } else {
+        res.status(500).json({
+          status: 'error',
+          message: 'Eroare la generarea fișierului bon',
+          details: 'Nu s-a putut crea fișierul pentru ECR Bridge',
+        });
+      }
       return;
     }
 
     // Generate the command that was sent (for validation)
-    // Format matches the official Datecs format
-    const fiscalCode = config.ecrBridge.fiscalCode;
-    const headerLine = fiscalCode ? `FISCAL;${fiscalCode}` : 'FISCAL';
-    const formattedPrice = printData.price.toString().replace(',', '.');
-    const itemLine = `I;${printData.productName} (${printData.duration});1;${formattedPrice};1`;
-    // Payment code: 0 = CASH (Numerar), 1 = CARD (Card) - conform documentației Datecs
-    const paymentCode = printData.paymentType === 'CASH' ? '0' : '1';
-    const paymentLine = `P;${paymentCode};0`;
-    const sentCommand = `${headerLine}\n${itemLine}\n${paymentLine}`;
+    // Format depends on mode
+    let sentCommand: string;
+    if (bridgeMode === 'live') {
+      // Format matches the official Datecs format
+      const fiscalCode = config.ecrBridge.fiscalCode;
+      const headerLine = fiscalCode ? `FISCAL;${fiscalCode}` : 'FISCAL';
+      const formattedPrice = printData.price.toString().replace(',', '.');
+      const itemLine = `I;${printData.productName} (${printData.duration});1;${formattedPrice};1`;
+      // Payment code: 0 = CASH (Numerar), 1 = CARD (Card) - conform documentației Datecs
+      const paymentCode = printData.paymentType === 'CASH' ? '0' : '1';
+      const paymentLine = `P;${paymentCode};0`;
+      sentCommand = `${headerLine}\n${itemLine}\n${paymentLine}`;
+    } else {
+      // TEST mode: Generate non-fiscal command for validation
+      const formattedPrice = printData.price.toString().replace(',', '.');
+      const lines: string[] = ['TEXT'];
+      lines.push(`T;${printData.productName} (${printData.duration})     ${formattedPrice}`);
+      lines.push('T;--------------------');
+      lines.push(`T;TOTAL: ${formattedPrice}`);
+      const paymentText = printData.paymentType === 'CASH' ? 'CASH' : 'CARD';
+      lines.push(`T;Plata: ${paymentText}`);
+      lines.push('T;Bon NON-FISCAL - TEST');
+      sentCommand = lines.join('\n');
+    }
 
     logger.info('Receipt file generated, waiting for response', {
       requestId,
       filename,
       sentCommand,
+      bridgeMode,
     });
 
     // Wait for ECR Bridge response
@@ -79,23 +109,44 @@ export async function handlePrintRequest(
         logger.info('Print request completed successfully', {
           requestId,
           filename,
+          bridgeMode,
         });
-        res.status(200).json({
-          status: 'success',
-          message: 'Bon fiscal emis',
-          file: filename,
-        });
+        
+        // Return appropriate success response based on mode
+        if (bridgeMode === 'test') {
+          res.status(200).json({
+            status: 'ok',
+            mode: 'test',
+          });
+        } else {
+          res.status(200).json({
+            status: 'success',
+            message: 'Bon fiscal emis',
+            file: filename,
+          });
+        }
       } else {
         logger.error('ECR Bridge returned error', {
           requestId,
           filename,
           details: response.details,
+          bridgeMode,
         });
-        res.status(500).json({
-          status: 'error',
-          message: 'Eroare la imprimare',
-          details: response.details || 'Eroare necunoscută de la ECR Bridge',
-        });
+        
+        // Return appropriate error response based on mode
+        if (bridgeMode === 'test') {
+          res.status(500).json({
+            status: 'error',
+            mode: 'test',
+            reason: 'bridge_failed',
+          });
+        } else {
+          res.status(500).json({
+            status: 'error',
+            message: 'Eroare la imprimare',
+            details: response.details || 'Eroare necunoscută de la ECR Bridge',
+          });
+        }
       }
     } catch (error) {
       // Timeout or other error while waiting
@@ -105,12 +156,23 @@ export async function handlePrintRequest(
         requestId,
         filename,
         error: errorMessage,
+        bridgeMode,
       });
-      res.status(504).json({
-        status: 'error',
-        message: 'Timeout la așteptarea răspunsului',
-        details: errorMessage,
-      });
+      
+      // Return appropriate timeout response based on mode
+      if (bridgeMode === 'test') {
+        res.status(504).json({
+          status: 'error',
+          mode: 'test',
+          reason: 'bridge_failed',
+        });
+      } else {
+        res.status(504).json({
+          status: 'error',
+          message: 'Timeout la așteptarea răspunsului',
+          details: errorMessage,
+        });
+      }
     }
   } catch (error) {
     // Unexpected error

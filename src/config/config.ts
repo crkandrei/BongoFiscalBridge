@@ -25,6 +25,9 @@ export const config = {
   // Logging
   logLevel: process.env.LOG_LEVEL || 'info',
   logDir: path.join(process.cwd(), 'logs'),
+
+  // Bridge mode: 'live' for fiscal receipts, 'test' for non-fiscal test receipts
+  bridgeMode: (process.env.BRIDGE_MODE || 'live').toLowerCase(),
 };
 
 // Validate required configuration
@@ -38,5 +41,10 @@ if (!config.ecrBridge.bonOkPath) {
 
 if (!config.ecrBridge.bonErrPath) {
   throw new Error('ECR_BRIDGE_BON_ERR_PATH is required in .env file');
+}
+
+// Validate bridge mode
+if (config.bridgeMode !== 'live' && config.bridgeMode !== 'test') {
+  throw new Error('BRIDGE_MODE must be either "live" or "test"');
 }
 
