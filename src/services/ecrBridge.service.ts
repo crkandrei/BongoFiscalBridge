@@ -58,6 +58,52 @@ class ECRBridgeService {
   }
 
   /**
+   * Generates a Z Report file
+   * Format: Z_YYYYMMDD_HHMMSS.txt with content "Z"
+   * @returns The generated filename (without path) or null on error
+   */
+  public generateZReportFile(): string | null {
+    try {
+      // Ensure the Bon directory exists
+      if (!ensureDirectoryExists(config.ecrBridge.bonPath)) {
+        logger.error('Failed to ensure Bon directory exists');
+        return null;
+      }
+
+      // Generate filename: Z_YYYYMMDD_HHMMSS.txt (with underscore between date and time)
+      const now = new Date();
+      const year = now.getFullYear();
+      const month = String(now.getMonth() + 1).padStart(2, '0');
+      const day = String(now.getDate()).padStart(2, '0');
+      const hours = String(now.getHours()).padStart(2, '0');
+      const minutes = String(now.getMinutes()).padStart(2, '0');
+      const seconds = String(now.getSeconds()).padStart(2, '0');
+      const filename = `Z_${year}${month}${day}_${hours}${minutes}${seconds}.txt`;
+      const filePath = path.join(config.ecrBridge.bonPath, filename);
+
+      // File content is just "Z" on a single line
+      const content = 'Z';
+
+      // Write file
+      if (!writeFileSafe(filePath, content)) {
+        logger.error('Failed to write Z report file', { filename, filePath });
+        return null;
+      }
+
+      logger.info('Z Report file generated', {
+        filename,
+        filePath,
+        content,
+      });
+
+      return filename;
+    } catch (error) {
+      logger.error('Error generating Z report file', { error });
+      return null;
+    }
+  }
+
+  /**
    * Generates the ECR Bridge file content according to mode
    * LIVE mode: Official Datecs fiscal format (FISCAL, I;, P;)
    * TEST mode: Non-fiscal test format (TEXT, T;)
