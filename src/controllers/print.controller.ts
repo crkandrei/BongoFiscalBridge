@@ -76,8 +76,8 @@ export async function handlePrintRequest(
       const headerLine = fiscalCode ? `FISCAL;${fiscalCode}` : 'FISCAL';
       const formattedPrice = printData.price.toString().replace(',', '.');
       const itemLine = `I;${printData.productName} (${printData.duration});1;${formattedPrice};1`;
-      // Payment code: 0 = CASH (Numerar), 1 = CARD (Card) - conform documentației Datecs
-      const paymentCode = printData.paymentType === 'CASH' ? '0' : '1';
+      // Payment code: 1 = CASH (Numerar), 2 = CARD (Card) - conform documentației Datecs
+      const paymentCode = printData.paymentType === 'CASH' ? '1' : '2';
       const paymentLine = `P;${paymentCode};0`;
       sentCommand = `${headerLine}\n${itemLine}\n${paymentLine}`;
     } else {

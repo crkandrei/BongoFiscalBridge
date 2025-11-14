@@ -77,9 +77,9 @@ class ECRBridgeService {
       const itemLine = `I;${productName} (${duration});1;${formattedPrice};1`;
       
       // Payment line: P;pay_code;value
-      // pay_code: 0 = CASH (Numerar), 1 = CARD (Card) - conform documentației Datecs
+      // pay_code: 1 = CASH (Numerar), 2 = CARD (Card) - conform documentației Datecs
       // value: 0 = pay total amount
-      const paymentCode = paymentType === 'CASH' ? '0' : '1';
+      const paymentCode = paymentType === 'CASH' ? '1' : '2';
       const paymentLine = `P;${paymentCode};0`;
       
       // Combine all lines
