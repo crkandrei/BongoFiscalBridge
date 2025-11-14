@@ -10,23 +10,50 @@ export enum PaymentType {
 }
 
 /**
- * Schema for validating print request input
+ * Schema for a single receipt item
  */
-export const printRequestSchema = z.object({
-  productName: z
-    .string()
-    .min(1, 'Product name is required and cannot be empty'),
-  duration: z.string().min(1, 'Duration is required and cannot be empty'),
+export const receiptItemSchema = z.object({
+  name: z.string().min(1, 'Item name is required and cannot be empty'),
+  quantity: z.number().positive('Quantity must be a positive number').default(1),
   price: z
     .number()
     .positive('Price must be a positive number')
     .finite('Price must be a finite number'),
+});
+
+/**
+ * Schema for validating print request input
+ * Supports both legacy format (productName/duration/price) and new format (items array)
+ */
+export const printRequestSchema = z.object({
+  // Legacy fields (optional if items is provided)
+  productName: z
+    .string()
+    .min(1, 'Product name is required if items is not provided')
+    .optional(),
+  duration: z.string().min(1, 'Duration is required if items is not provided').optional(),
+  price: z
+    .number()
+    .positive('Price must be a positive number')
+    .finite('Price must be a finite number')
+    .optional(),
+  // New format: array of items
+  items: z.array(receiptItemSchema).min(1, 'At least one item is required').optional(),
   paymentType: z.nativeEnum(PaymentType, {
     errorMap: () => ({
       message: 'Payment type must be either CASH or CARD',
     }),
   }),
-});
+}).refine(
+  (data) => {
+    // Either items array OR legacy productName/duration/price must be provided
+    return (data.items && data.items.length > 0) || 
+           (data.productName && data.duration !== undefined && data.price !== undefined);
+  },
+  {
+    message: 'Either items array or productName/duration/price must be provided',
+  }
+);
 
 /**
  * Type inference from Zod schema

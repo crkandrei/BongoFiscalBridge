@@ -63,18 +63,46 @@ class ECRBridgeService {
    * TEST mode: Non-fiscal test format (TEXT, T;)
    */
   private generateFileContent(data: PrintRequest, mode: 'live' | 'test'): string {
-    const { productName, duration, price, paymentType } = data;
+    const { paymentType, items } = data;
+    
+    // Calculate total price
+    let totalPrice = 0;
+    const receiptItems: Array<{ name: string; quantity: number; price: number }> = [];
+    
+    if (items && items.length > 0) {
+      // New format: use items array
+      items.forEach((item) => {
+        receiptItems.push({
+          name: item.name,
+          quantity: item.quantity || 1,
+          price: item.price,
+        });
+        totalPrice += item.price * (item.quantity || 1);
+      });
+    } else {
+      // Legacy format: use productName/duration/price
+      const { productName, duration, price } = data;
+      if (!productName || duration === undefined || price === undefined) {
+        throw new Error('Either items array or productName/duration/price must be provided');
+      }
+      receiptItems.push({
+        name: `${productName} (${duration})`,
+        quantity: 1,
+        price: price,
+      });
+      totalPrice = price;
+    }
     
     if (mode === 'live') {
-      // Format price with dot as decimal separator
-      const formattedPrice = price.toString().replace(',', '.');
-      
       // Build header line: FISCAL or FISCAL;fiscalCode
       const fiscalCode = config.ecrBridge.fiscalCode;
       const headerLine = fiscalCode ? `FISCAL;${fiscalCode}` : 'FISCAL';
       
-      // Item line: I;name;qty;price;vat
-      const itemLine = `I;${productName} (${duration});1;${formattedPrice};1`;
+      // Generate item lines: I;name;qty;price;vat (one for each item)
+      const itemLines = receiptItems.map((item) => {
+        const formattedPrice = item.price.toString().replace(',', '.');
+        return `I;${item.name};${item.quantity};${formattedPrice};1`;
+      });
       
       // Payment line: P;pay_code;value
       // pay_code: 1 = CASH (Numerar), 2 = CARD (Card) - conform documentației Datecs
@@ -83,24 +111,25 @@ class ECRBridgeService {
       const paymentLine = `P;${paymentCode};0`;
       
       // Combine all lines
-      return `${headerLine}\n${itemLine}\n${paymentLine}`;
+      return `${headerLine}\n${itemLines.join('\n')}\n${paymentLine}`;
     } else {
       // TEST mode: Non-fiscal format
-      // Format price with dot as decimal separator
-      const formattedPrice = price.toString().replace(',', '.');
-      
       // First line: TEXT
       const lines: string[] = ['TEXT'];
       
-      // Product line: T;<productName (duration)>     <price>
-      const productLine = `T;${productName} (${duration})     ${formattedPrice}`;
-      lines.push(productLine);
+      // Product lines: T;<name>     <price>
+      receiptItems.forEach((item) => {
+        const formattedPrice = item.price.toString().replace(',', '.');
+        const itemLine = `T;${item.name}${item.quantity > 1 ? ` x${item.quantity}` : ''}     ${formattedPrice}`;
+        lines.push(itemLine);
+      });
       
       // Separator
       lines.push('T;--------------------');
       
       // Total line: T;TOTAL: <total>
-      lines.push(`T;TOTAL: ${formattedPrice}`);
+      const formattedTotal = totalPrice.toString().replace(',', '.');
+      lines.push(`T;TOTAL: ${formattedTotal}`);
       
       // Payment line: T;Plata: CASH or T;Plata: CARD
       const paymentText = paymentType === 'CASH' ? 'CASH' : 'CARD';
