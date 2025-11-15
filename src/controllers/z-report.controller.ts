@@ -4,7 +4,7 @@ import ecrBridgeService from '../services/ecrBridge.service';
 
 /**
  * Handles POST /z-report request
- * Generates a Z report file in the Bon directory
+ * Generates a Z report file in the Bon directory and waits for ECR response
  */
 export async function handleZReportRequest(
   req: Request,
@@ -33,16 +33,61 @@ export async function handleZReportRequest(
       return;
     }
 
-    logger.info('Z Report file generated successfully', {
+    logger.info('Z Report file generated successfully, waiting for ECR response', {
       requestId,
       filename,
     });
 
-    res.status(200).json({
-      status: 'success',
-      message: 'Raport Z generat cu succes',
-      file: filename,
-    });
+    // Wait for ECR Bridge response
+    // Pass "Z;1" as expected command to verify the error file corresponds to this Z report
+    // Use longer timeout for Z reports (60 seconds) as they may take longer to process
+    try {
+      const zReportTimeout = 60000; // 60 seconds for Z reports
+      const response = await ecrBridgeService.waitForResponse(filename, 'Z;1', zReportTimeout);
+
+      if (response.success) {
+        logger.info('Z Report request completed successfully', {
+          requestId,
+          filename,
+        });
+        
+        res.status(200).json({
+          status: 'success',
+          message: 'Z;1',
+          file: filename,
+        });
+      } else {
+        logger.error('ECR Bridge returned error for Z report', {
+          requestId,
+          filename,
+          details: response.details,
+        });
+        
+        res.status(500).json({
+          status: 'error',
+          message: 'Eroare la generarea raportului Z',
+          details: response.details || 'Eroare necunoscută de la ECR Bridge',
+        });
+      }
+    } catch (error) {
+      // Timeout or other error while waiting
+      const errorMessage =
+        error instanceof Error
+          ? error.message
+          : 'Timeout la așteptarea răspunsului de la ECR Bridge';
+      
+      logger.error('Error waiting for Z report response', {
+        requestId,
+        filename,
+        error: errorMessage,
+      });
+      
+      res.status(504).json({
+        status: 'error',
+        message: 'Timeout la așteptarea răspunsului de la ECR Bridge',
+        details: errorMessage,
+      });
+    }
   } catch (error) {
     logger.error('Error handling Z report request', {
       requestId,

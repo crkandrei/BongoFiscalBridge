@@ -59,7 +59,7 @@ class ECRBridgeService {
 
   /**
    * Generates a Z Report file
-   * Format: Z_YYYYMMDD_HHMMSS.txt with content "Z"
+   * Format: Z_YYYYMMDD_HHMMSS.txt with content "Z;1"
    * @returns The generated filename (without path) or null on error
    */
   public generateZReportFile(): string | null {
@@ -81,8 +81,8 @@ class ECRBridgeService {
       const filename = `Z_${year}${month}${day}_${hours}${minutes}${seconds}.txt`;
       const filePath = path.join(config.ecrBridge.bonPath, filename);
 
-      // File content is just "Z" on a single line
-      const content = 'Z';
+      // File content is "Z;1" on a single line
+      const content = 'Z;1';
 
       // Write file
       if (!writeFileSafe(filePath, content)) {
@@ -176,6 +176,12 @@ class ECRBridgeService {
       // Total line: T;TOTAL: <total>
       const formattedTotal = totalPrice.toString().replace(',', '.');
       lines.push(`T;TOTAL: ${formattedTotal}`);
+      
+      // Voucher line (if voucher hours provided)
+      if (data.voucherHours && data.voucherHours > 0) {
+        const voucherHoursFormatted = data.voucherHours.toString().replace(',', '.');
+        lines.push(`T;Voucher: ${voucherHoursFormatted}h`);
+      }
       
       // Payment line: T;Plata: CASH or T;Plata: CARD
       const paymentText = paymentType === 'CASH' ? 'CASH' : 'CARD';

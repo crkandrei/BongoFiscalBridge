@@ -44,6 +44,8 @@ export const printRequestSchema = z.object({
       message: 'Payment type must be either CASH or CARD',
     }),
   }),
+  // Voucher hours (optional)
+  voucherHours: z.number().min(0, 'Voucher hours must be non-negative').optional(),
 }).refine(
   (data) => {
     // Either items array OR legacy productName/duration/price must be provided
