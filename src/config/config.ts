@@ -20,7 +20,7 @@ export const config = {
   },
 
   // Response timeout in milliseconds
-  responseTimeout: parseInt(process.env.RESPONSE_TIMEOUT || '10000', 10),
+  responseTimeout: parseInt(process.env.RESPONSE_TIMEOUT || '15000', 10),
 
   // Logging
   logLevel: process.env.LOG_LEVEL || 'info',

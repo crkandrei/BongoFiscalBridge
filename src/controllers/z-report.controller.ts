@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import logger from '../utils/logger';
 import ecrBridgeService from '../services/ecrBridge.service';
+import { config } from '../config/config';
 
 /**
  * Handles POST /z-report request
@@ -40,9 +41,9 @@ export async function handleZReportRequest(
 
     // Wait for ECR Bridge response
     // Pass "Z;1" as expected command to verify the error file corresponds to this Z report
-    // Use longer timeout for Z reports (60 seconds) as they may take longer to process
+    // Use longer timeout for Z reports (30 seconds) as they may take longer to process
     try {
-      const zReportTimeout = 60000; // 60 seconds for Z reports
+      const zReportTimeout = 30000; // 30 seconds for Z reports
       const response = await ecrBridgeService.waitForResponse(filename, 'Z;1', zReportTimeout);
 
       if (response.success) {

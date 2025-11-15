@@ -37,7 +37,7 @@ ECR_BRIDGE_BON_PATH=C:/ECRBridge/Bon/
 ECR_BRIDGE_BON_OK_PATH=C:/ECRBridge/BonOK/
 ECR_BRIDGE_BON_ERR_PATH=C:/ECRBridge/BonErr/
 ECR_BRIDGE_FISCAL_CODE=
-RESPONSE_TIMEOUT=10000
+RESPONSE_TIMEOUT=15000
 LOG_LEVEL=info
 ```
 
@@ -270,7 +270,7 @@ Toate configurațiile se fac prin fișierul `.env`:
 | `ECR_BRIDGE_BON_OK_PATH` | Calea către folderul BonOK | `C:/ECRBridge/BonOK/` |
 | `ECR_BRIDGE_BON_ERR_PATH` | Calea către folderul BonErr | `C:/ECRBridge/BonErr/` |
 | `ECR_BRIDGE_FISCAL_CODE` | Cod fiscal (opțional) - dacă este setat, va fi inclus în header | - |
-| `RESPONSE_TIMEOUT` | Timeout pentru așteptare răspuns (ms) | `10000` |
+| `RESPONSE_TIMEOUT` | Timeout pentru așteptare răspuns (ms) | `15000` |
 | `LOG_LEVEL` | Nivelul de logare (info, warn, error) | `info` |
 
 ## 🐛 Troubleshooting
